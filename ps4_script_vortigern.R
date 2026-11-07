@@ -129,3 +129,58 @@ forecast::dm.test(liquor_errs$arima, liquor_errs$snaive, h = 1, power = 2)
 
 
 
+
+# 3: Forecast Combination ----
+liquor_combo_fc <- liquor_cv_fit |>
+  mutate(combo = (arima + ets) / 2) |>
+  forecast(h = 1)
+
+liquor_combo_fc |>
+  accuracy(liquor, measures = list(RMSE = RMSE, MAE = MAE))
+
+# Model  type  RMSE  MAE
+#
+# arima  Test  81.4  65.7
+# combo  Test  85.2  66.8
+# ets    Test  94.4  72.3
+# snaive Test  161.  137. 
+#
+# Combo does better than the SRW and ETS models, but worse than the ARIMA model. 
+
+cor(liquor_errs$arima, liquor_errs$ets)
+
+# The combination does not beat the ARIMA model because the ARIMA and ETS 
+# errors are highly correlated, and because the ETS is statistically 
+# significantly less accurate than the ARIMA. The correlation coefficient of
+# 0.878 is quite high, meaning that the models missed many of the same forecasts, 
+# and the combined models errors are basically an average of the ARIMA's errors
+# + the errors of the less accurate ETS.
+
+
+
+
+
+
+# 4.1: Loading Data ----
+qd_raw <- read_csv("data/fredqd_2026-09.csv", show_col_types = FALSE) |>
+  slice(-(1:2))
+
+growth <- function(x) 100 * difference(log(x))
+
+qd <- qd_raw |>
+  mutate(date = as.Date(sasdate, "%m/%d/%Y")) |>
+  transmute(date,
+            gdp    = growth(GDPC1),     # real GDP
+            cons   = growth(PCECC96),   # real consumption
+            inv    = growth(GPDIC1),    # real investment
+            emp    = growth(PAYEMS),    # payroll employment
+            infl   = growth(GDPCTPI),   # GDP price index
+            unrate = difference(UNRATE),     # unemployment rate
+            ffr    = difference(FEDFUNDS),   # federal funds rate
+            gs10   = difference(GS10)) |>    # 10-year Treasury yield
+  filter(date >= as.Date("1960-03-01"), date <= as.Date("2019-12-01"))
+
+y <- qd |> select(-date) |> as.matrix()
+
+nrow(y)
+head(y)
