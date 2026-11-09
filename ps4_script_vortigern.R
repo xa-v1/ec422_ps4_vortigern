@@ -75,10 +75,7 @@ liquor_cv <- liquor |>
   stretch_tsibble(.init = 120, .step = 1) |>
   filter(.id < max(.id))
 
-liquor_cv_fit <- liquor_cv |>
-  model(snaive = SNAIVE(sales),
-        ets    = ETS(log(sales)),
-        arima  = ARIMA(log(sales)))
+liquor_cv_fit <- readRDS("results/liquor_cv_fit.rds")
 
 saveRDS(liquor_cv_fit, "results/liquor_cv_fit.rds")
 
@@ -184,3 +181,48 @@ y <- qd |> select(-date) |> as.matrix()
 
 nrow(y)
 head(y)
+
+N <- nrow(y)
+origins <- 120:(N - 1)
+actual <- y[121:N, ]
+
+# We will produce 116 forecasts for each variable (4 Quarterly forecasts for each of 
+# the 29 years from 1990 to 2019). The first forecase will be for Q1 of 1990, and the 
+# last will be for Q4 of 2019. 
+
+# 4.2L OLS VAR's ----
+var_ols_fc <- function(z, p) {
+  e <- embed(z, p + 1)            # columns: y_t, then its lags 1 to p
+  M <- ncol(z)                    # number of variables
+  B <- coef(lm(e[, 1:M] ~ e[, -(1:M)]))
+  x <- c(1, t(z[nrow(z):(nrow(z) - p + 1), ]))   # constant, latest p lags
+  x %*% B
+}
+
+fc_var1 <- NULL
+fc_var4 <- NULL
+for (T in origins) {
+  fc_var1 <- rbind(fc_var1, var_ols_fc(y[1:T, ], 1))
+  fc_var4 <- rbind(fc_var4, var_ols_fc(y[1:T, ], 4))
+}
+
+rmse_by_var <- function(f) sqrt(colMeans((actual - f)^2))
+
+rmse_by_var(fc_var1)
+rmse_by_var(fc_var4)
+
+# The VAR(1) forecasts more accurately for 7/8 of the variables. Since VAR(1) is 
+# the special case of VAR(4) where the coeffficients on lags 2, 3, and 4 are equal
+# to 0, it will fit as least as good as the VAR(1) in sample, and this might mean 
+# that the VAR(4) is overfitting the training data. The increased estimation error 
+# created by estimating 4 lags outweighs any benefits of potentially decreased 
+# approximation error. 
+
+
+
+
+
+
+
+
+
