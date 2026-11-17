@@ -32,7 +32,7 @@ gg_season(liquor, y = log(sales)) +
 
 # There is a clear upward sloping trend and seasonal pattern, with  sales increasing 
 # more or less linearly over time, and a big spike every year in December. Sales are 
-# typically lowest in Jan/Fed and highest in December, and the size of the seasonal 
+# typically lowest in Jan/Feb and highest in December, and the size of the seasonal 
 # swings grows with the level, so this series is a good candidate for a log 
 # transformation. 
 
@@ -62,12 +62,9 @@ liquor_fit |>
   augment() |>
   features(.innov, ljung_box, lag = 24, dof = 6)
 
-# Yes, the residuals look like white noise, and the L-B test confirms this. 
-
-
-
-
-
+# Yes, the residuals look vaguely like white noise, but the L-B test rejects the null 
+# with a p-value of essentially 0, meaning that we reject the assumption of white 
+# noise. There is still leftover structure in the residuals.  
 
 
 # 2.3: The Horse Race ----
@@ -88,16 +85,17 @@ liquor_cv_fc <- liquor_cv_fit |>
   forecast(h = 1)
 
 liquor_cv_fc |>
-  accuracy(liquor, measures = list(RMSE = RMSE, MAE = MAE))
+  accuracy(liquor, measures = list(RMSE = RMSE, MAE = MAE)) |>
+  knitr::kable(digits = 2)
 
-# January 2002 is the first forecase and December 2019 is the last. 
+# January 2002 is the first forecast and December 2019 is the last. 
 # Model  Type  RMSE   MAE
 # 
 # arima  Test  81.4   65.7
 # ets    Test  94.4   72.3
 # snaive Test  161.   137. 
 #
-# The ARIMA model forecast the most accurately, having both the loweset MAE and 
+# The ARIMA model forecast the most accurately, having both the lowest MAE and 
 # RMSE. 
 
 # 2.4: DM Test ----
@@ -133,7 +131,8 @@ liquor_combo_fc <- liquor_cv_fit |>
   forecast(h = 1)
 
 liquor_combo_fc |>
-  accuracy(liquor, measures = list(RMSE = RMSE, MAE = MAE))
+  accuracy(liquor, measures = list(RMSE = RMSE, MAE = MAE)) |>
+  knitr::kable(digits = 2)
 
 # Model  type  RMSE  MAE
 #
@@ -186,8 +185,8 @@ N <- nrow(y)
 origins <- 120:(N - 1)
 actual <- y[121:N, ]
 
-# We will produce 116 forecasts for each variable (4 Quarterly forecasts for each of 
-# the 29 years from 1990 to 2019). The first forecase will be for Q1 of 1990, and the 
+# We will produce 120 forecasts for each variable (4 Quarterly forecasts for each of 
+# the 30 years from 1990 to 2019). The first forecast will be for Q1 of 1990, and the 
 # last will be for Q4 of 2019. 
 
 # 4.2: OLS VAR's ----
@@ -291,7 +290,7 @@ forecast::dm.test(v2e_var4, v2e_bvar, h = 1, power = 2)
 # the INV variable. This means that the accuracy gap is real for GDP, but we cannot 
 # distinguish between the two models for INV. This reinforces how I felt about the 
 # results for 4.3b, as it shows how one of the cases where it appeared the VAR(1) 
-# was more accurate did now hold up through the DM test. 
+# was more accurate did not hold up through the DM test. 
 
 
 
@@ -319,6 +318,8 @@ fm <- map2_dfc(md[names(tcode)], tcode, transform_series) |>
 fm <- fm[, colSums(is.na(fm)) == 0]
 
 dim(fm)
+
+tcode[c("INDPRO", "PAYEMS", "CPIAUCSL", "FEDFUNDS")]
 
 # INDPRO and PAYEMS are transformed into their growth rates, CPIAUCSL is transformed 
 # into the change in the growth rate, and FEDFUNDS is transformed with a first 
@@ -360,8 +361,8 @@ sort(abs(cor(pc$x[, 2], Z))[1, ], decreasing = TRUE)[1:8]
 # The first factor captures the production side of the economy. It is highly correlated 
 # with multiple series tracking employment and industrial production. 
 # 
-# The second factor captures the consumption side of the economy. It is highly 
-# correlated with multiple series tracking consumption via the CPI. 
+# The second factor captures price indexes/inflation. It is highlycorrelated with 
+# multiple series tracking consumption via the CPI. 
 
 
 
@@ -416,6 +417,6 @@ direct_race <- function(series, h = 12, r = 3) {
 
 direct_race("CPIAUCSL")
 
-# Yes, the factors improve the forecast, reducing RMSE by 11.64%. This difference is 
+# Yes, the factors improve the forecast, reducing RMSE by ~10.3%. This difference is 
 # statistically significant at any realistic significance level, with a p-value of 
 # 0.0004, meaning that we can reject the null of equal accuracy. 
