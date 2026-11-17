@@ -190,7 +190,7 @@ actual <- y[121:N, ]
 # the 29 years from 1990 to 2019). The first forecase will be for Q1 of 1990, and the 
 # last will be for Q4 of 2019. 
 
-# 4.2L OLS VAR's ----
+# 4.2: OLS VAR's ----
 var_ols_fc <- function(z, p) {
   e <- embed(z, p + 1)            # columns: y_t, then its lags 1 to p
   M <- ncol(z)                    # number of variables
@@ -224,5 +224,73 @@ rmse_by_var(fc_var4)
 
 
 
+
+
+
+# 4.3: BVAR ----
+bvar_cv <- function(lambda) {
+  pr <- bv_priors(hyper = "lambda",
+                  mn = bv_mn(lambda = bv_lambda(mode = lambda, sd = 0.4,
+                                                min = 0.999 * lambda,
+                                                max = 1.001 * lambda),
+                             b = 0))
+  fc <- NULL
+  for (T in origins) {
+    fit_T <- bvar(y[1:T, ], lags = 4, priors = pr,
+                  n_draw = 2000, n_burn = 1000, verbose = FALSE)
+    x <- c(1, t(y[T:(T - 3), ]))         # constant and 4 lags of each variable
+    fc <- rbind(fc, x %*% coef(fit_T))   # forecast of y_{T+1}
+  }
+  fc
+}
+
+set.seed(422)
+fc_bvar_03 <- bvar_cv(0.3)
+saveRDS(fc_bvar_03, "results/fc_bvar_03.rds")
+
+set.seed(422)
+fc_bvar_005 <- bvar_cv(0.05)
+
+var_results <- tibble(
+  Variable = colnames(y),
+  `VAR(1)` = rmse_by_var(fc_var1),
+  `VAR(4)` = rmse_by_var(fc_var4),
+  `BVAR(4), lambda = 0.3` = rmse_by_var(fc_bvar_03),
+  `BVAR(4), lambda = 0.05` = rmse_by_var(fc_bvar_005)
+)
+
+saveRDS(var_results, "results/var_results.rds")
+
+readRDS("results/var_results.rds") |> knitr::kable(digits = 3)
+
+# The BVAR(4) with lambda = 0.3 does better than the VAR(4) for all of the variables. 
+# The difference is explained by the shrinkage performed in the BVAR, which is reducing
+# our estimation error. 
+# 
+# It does worse than the VAR(1) for 5/8 of the variables, which could be an indicator
+# that the additional lags are introducing more estimation error than useful 
+# information.
+# 
+# When lamba = 0.05, it performs worse for everything except the ffr variable, which
+# tells us that we should not be shrinnking this aggressively. I think that saying
+# that the winners RMSE is a fair estimate of future forecast accuracy is too
+# optimistic, because it could have just gotten lucky in this training sample. 
+# We tested four different models across 8 variables, so there is a good chance some 
+# of the low RMSE's are just due to chance.
+
+e_var4 <- actual[, "gdp"] - fc_var4[, 1]
+e_bvar <- actual[, "gdp"] - fc_bvar_03[, 1]
+
+v2e_var4 <- actual[, "inv"] - fc_var4[, 3]
+v2e_bvar <- actual[, "inv"] - fc_bvar_03[, 3]
+
+forecast::dm.test(e_var4, e_bvar, h = 1, power = 2)
+forecast::dm.test(v2e_var4, v2e_bvar, h = 1, power = 2)
+
+# Based on the DM tests, we reject the null for GDP, and fail to reject the null for 
+# the INV variable. This means that the accuracy gap is real for GDP, but we cannot 
+# distinguish between the two models for INV. This reinforces how I felt about the 
+# results for 4.3b, as it shows how one of the cases where it appeared the VAR(1) 
+# was more accurate did now hold up through the DM test. 
 
 
